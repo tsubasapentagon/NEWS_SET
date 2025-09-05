@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>業界選択（ニュース設定）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" crossorigin="anonymous">
+  <style>
+    body { padding: 16px; }
+    .card { max-width: 680px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">業界ニュースの受け取り設定</h5>
+    <p class="text-muted mb-3">1つだけ選べます。2回目以降は前回の設定を自動で反映します。</p>
+
+    <form id="prefForm" class="w-100">
+      <div class="form-group">
+        <label class="d-block font-weight-bold mb-1">業界（単一選択）</label>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-it" name="industry" value="IT・通信">
+          <label class="custom-control-label" for="ind-it">IT・通信</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-mfg" name="industry" value="商社・メーカー・製造業">
+          <label class="custom-control-label" for="ind-mfg">商社・メーカー・製造業</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-fin" name="industry" value="金融・保険">
+          <label class="custom-control-label" for="ind-fin">金融・保険</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-hr" name="industry" value="人材・HR">
+          <label class="custom-control-label" for="ind-hr">人材・HR</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-re" name="industry" value="不動産・建設">
+          <label class="custom-control-label" for="ind-re">不動産・建設</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-med" name="industry" value="医療・ヘルスケア">
+          <label class="custom-control-label" for="ind-med">医療・ヘルスケア</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-ret" name="industry" value="小売・EC">
+          <label class="custom-control-label" for="ind-ret">小売・EC</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-consult" name="industry" value="コンサルティング">
+          <label class="custom-control-label" for="ind-consult">コンサルティング</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-edu" name="industry" value="教育・研修">
+          <label class="custom-control-label" for="ind-edu">教育・研修</label>
+        </div>
+
+        <div class="custom-control custom-radio">
+          <input type="radio" class="custom-control-input" id="ind-mkt" name="industry" value="広告・マーケティング">
+          <label class="custom-control-label" for="ind-mkt">広告・マーケティング</label>
+        </div>
+      </div>
+
+      <div class="custom-control custom-switch mb-3">
+        <input type="checkbox" class="custom-control-input" id="active" checked>
+        <label class="custom-control-label" for="active">配信を受け取る</label>
+      </div>
+
+      <div class="d-flex">
+        <input type="submit" class="btn btn-primary mr-2" value="送信">
+        <button type="button" id="closeBtn" class="btn btn-outline-secondary">閉じる</button>
+      </div>
+
+      <small id="msg" class="form-text text-muted mt-2"></small>
+    </form>
+  </div>
+</div>
+
+<!-- deps -->
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<script>
+  // ====== 設定 ======
+  const LIFF_ID  = "2008057279-r9bqNqPB"; // ←そのまま
+  const GAS_BASE = "https://script.google.com/macros/s/AKfycbwtG8hKS9x9Tj0zhxxnfz9KchSU2-fdbxbljYA9ewc-rMEwbH2D5Wr-F11v8fIXuq3uqQ/exec"; // ←そのまま
+
+  // URLパラメータ: ?save=1（保存） / ?pref=1（既存読込）
+  const urlParams = new URL(location.href).searchParams;
+  const WANT_SAVE = urlParams.get("save") === "1";
+  const WANT_PREF = urlParams.get("pref") === "1";
+
+  let lineUserId = "";
+
+  $(async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login({ scope: 'openid profile' });
+        return;
+      }
+      if (!liff.isInClient()) {
+        $("#msg").text("※LINEアプリ内で開くとトークに送信できます。");
+      }
+
+      lineUserId = liff.getDecodedIDToken()?.sub || "";
+      if (!lineUserId) $("#msg").text("ユーザーIDの取得に失敗しました。");
+
+      // 既存設定の取得（pref=1 のとき）
+      if (GAS_BASE && WANT_PREF && lineUserId) {
+        await loadPrefFromGas(lineUserId);
+      }
+
+      // 送信
+      $("#prefForm").on("submit", async function(e) {
+        e.preventDefault();
+        const { industry, active } = collectForm();
+        if (!industry) {
+          $("#msg").text("業界を1つ選択してください。");
+          return;
+        }
+
+        // 1) トークへ送信
+        const text =
+          "ニュース設定\n" +
+          `LINE_ID: ${lineUserId}\n` +
+          `業界: ${industry}\n` +
+          `配信: ${active ? "ON" : "OFF"}`;
+
+        try {
+          await liff.sendMessages([{ type: "text", text }]);
+        } catch (err) {
+          alert("メッセージ送信に失敗しました: " + err);
+          return;
+        }
+
+        // 2)（任意）GASへ保存（industriesは単一でも配列で送る）
+        if (GAS_BASE && WANT_SAVE && lineUserId) {
+          const ok = await savePrefToGas(lineUserId, [industry], active);
+          if (!ok) $("#msg").text("保存には失敗しましたが、メッセージ送信は完了しました。");
+        }
+
+        if (liff.isInClient()) liff.closeWindow();
+      });
+
+      $("#closeBtn").on("click", () => {
+        if (liff.isInClient()) liff.closeWindow(); else window.close();
+      });
+
+    } catch (err) {
+      console.error(err);
+      $("#msg").text("初期化でエラーが発生しました。");
+    }
+  });
+
+  function collectForm() {
+    const picked = document.querySelector('input[name="industry"]:checked');
+    const industry = picked ? picked.value : "";
+    const active = document.getElementById("active").checked;
+    return { industry, active };
+  }
+
+  async function loadPrefFromGas(uid) {
+    try {
+      const url = `${GAS_BASE}?action=get_news_pref&line_user_id=${encodeURIComponent(uid)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const json = await res.json();
+      if (json && json.ok) {
+        // 単一選択のため、先頭があればチェック
+        const selected = (json.industries && json.industries[0]) || "";
+        if (selected) {
+          const radio = [...document.querySelectorAll('input[name="industry"]')].find(r => r.value === selected);
+          if (radio) radio.checked = true;
+        }
+        document.getElementById("active").checked = !!json.active;
+        $("#msg").text("前回の設定を読み込みました。");
+      }
+    } catch (e) {
+      $("#msg").text("既存設定の読み込みに失敗しました。");
+    }
+  }
+
+  async function savePrefToGas(uid, industries, active) {
+    try {
+      const res = await fetch(GAS_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ line_user_id: uid, industries, active })
+      });
+      const json = await res.json();
+      return !!(json && json.ok);
+    } catch (e) {
+      return false;
+    }
+  }
+</script>
+</body>
+</html>
